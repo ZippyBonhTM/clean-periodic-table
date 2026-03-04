@@ -82,12 +82,8 @@ function PeriodicTable({ elements, mode = 'explore' }: PeriodicTableProps) {
   const [sortMode, setSortMode] = useState<SortMode>('number');
   const [query, setQuery] = useState('');
   const [selectedElement, setSelectedElement] = useState<ChemicalElement | null>(null);
-  const [isTableFullscreen, setIsTableFullscreen] = useState(false);
-  const [isSimulatedFullscreen, setIsSimulatedFullscreen] = useState(false);
   const viewToggleRef = useRef<HTMLButtonElement | null>(null);
   const sortToggleRef = useRef<HTMLButtonElement | null>(null);
-  const fullscreenContainerRef = useRef<HTMLDivElement | null>(null);
-  const previousZoomRef = useRef<number | null>(null);
   const [isPendingTransition, startTransition] = useTransition();
   const isExploreMode = mode === 'explore';
   const deferredQuery = useDeferredValue(query);
@@ -193,72 +189,6 @@ function PeriodicTable({ elements, mode = 'explore' }: PeriodicTableProps) {
     }
   }, [hasNextElement, selectedElementIndex, visibleElements]);
 
-  const onToggleTableFullscreen = useCallback(async () => {
-    if (isSimulatedFullscreen) {
-      setIsSimulatedFullscreen(false);
-
-      if (previousZoomRef.current !== null) {
-        setClassicZoomPercent(previousZoomRef.current);
-        previousZoomRef.current = null;
-      }
-
-      return;
-    }
-
-    if (typeof document === 'undefined') {
-      return;
-    }
-
-    const containerElement = fullscreenContainerRef.current;
-    if (containerElement === null) {
-      return;
-    }
-
-    const hasNativeFullscreenSupport =
-      document.fullscreenEnabled !== false &&
-      typeof containerElement.requestFullscreen === 'function' &&
-      typeof document.exitFullscreen === 'function';
-    const isLikelyMobile =
-      typeof window !== 'undefined' &&
-      window.matchMedia('(hover: none) and (pointer: coarse)').matches;
-
-    if (document.fullscreenElement === containerElement) {
-      try {
-        await document.exitFullscreen();
-      } catch {
-        // Ignore exit failures and keep current state.
-      }
-      return;
-    }
-
-    if (!hasNativeFullscreenSupport || isLikelyMobile) {
-      previousZoomRef.current = classicZoomPercent;
-      setIsSimulatedFullscreen(true);
-
-      if (activeViewMode === 'classic') {
-        setClassicZoomPercent(getClassicFitZoomPercent());
-      }
-
-      return;
-    }
-
-    previousZoomRef.current = classicZoomPercent;
-    try {
-      await containerElement.requestFullscreen();
-    } catch {
-      setIsSimulatedFullscreen(true);
-
-      if (activeViewMode === 'classic') {
-        setClassicZoomPercent(getClassicFitZoomPercent());
-      }
-    }
-  }, [
-    activeViewMode,
-    classicZoomPercent,
-    getClassicFitZoomPercent,
-    isSimulatedFullscreen,
-  ]);
-
   const getFloatingMenuPosition = useCallback((anchor: HTMLButtonElement, minWidth: number) => {
     if (typeof window === 'undefined') {
       return null;
@@ -294,6 +224,7 @@ function PeriodicTable({ elements, mode = 'explore' }: PeriodicTableProps) {
 
   useEffect(() => {
     if (!isViewMenuOpen) {
+      setViewMenuPosition(null);
       return;
     }
 
@@ -322,6 +253,7 @@ function PeriodicTable({ elements, mode = 'explore' }: PeriodicTableProps) {
 
   useEffect(() => {
     if (!isSortMenuOpen) {
+      setSortMenuPosition(null);
       return;
     }
 
@@ -347,37 +279,6 @@ function PeriodicTable({ elements, mode = 'explore' }: PeriodicTableProps) {
       window.removeEventListener('keydown', onEscape);
     };
   }, [isSortMenuOpen, syncSortMenuPosition]);
-
-  useEffect(() => {
-    if (typeof document === 'undefined') {
-      return;
-    }
-
-    const onFullscreenChange = () => {
-      const containerElement = fullscreenContainerRef.current;
-      const isActive = document.fullscreenElement === containerElement;
-
-      setIsTableFullscreen(isActive);
-      if (isActive) {
-        setIsSimulatedFullscreen(false);
-      }
-
-      if (isActive && activeViewMode === 'classic') {
-        setClassicZoomPercent(getClassicFitZoomPercent());
-      }
-
-      if (!isActive && !isSimulatedFullscreen && previousZoomRef.current !== null) {
-        setClassicZoomPercent(previousZoomRef.current);
-        previousZoomRef.current = null;
-      }
-    };
-
-    document.addEventListener('fullscreenchange', onFullscreenChange);
-
-    return () => {
-      document.removeEventListener('fullscreenchange', onFullscreenChange);
-    };
-  }, [activeViewMode, getClassicFitZoomPercent, isSimulatedFullscreen]);
 
   const currentSortOption = useMemo(() => {
     return SORT_OPTIONS.find((option) => option.mode === sortMode) ?? SORT_OPTIONS[0];
@@ -483,8 +384,8 @@ function PeriodicTable({ elements, mode = 'explore' }: PeriodicTableProps) {
     <section className="space-y-4">
       {isExploreMode ? (
         <div className="surface-panel rounded-2xl border border-[var(--border-subtle)] overflow-visible [contain:none] p-4 md:p-5">
-          <div className="flex flex-col gap-3 min-[768px]:flex-row min-[768px]:items-start">
-            <div className="min-w-0 min-[768px]:flex-[1_1_360px]">
+          <div className="flex flex-col gap-3 min-[518px]:flex-row min-[518px]:items-start">
+            <div className="min-w-0 min-[518px]:flex-[1_1_360px]">
               <label
                 htmlFor="element-search"
                 className="mb-1 block text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)]"
@@ -514,7 +415,6 @@ function PeriodicTable({ elements, mode = 'explore' }: PeriodicTableProps) {
                     variant="ghost"
                     size="md"
                     align="between"
-                    className="min-w-[172px] whitespace-nowrap"
                     onClick={() => {
                       setIsSortMenuOpen((previous) => {
                         const nextState = !previous;
@@ -551,14 +451,13 @@ function PeriodicTable({ elements, mode = 'explore' }: PeriodicTableProps) {
                   Clear
                 </Button>
 
-                <div className="relative min-[768px]:hidden">
+                <div className="relative min-[518px]:hidden">
                   <Button
                     type="button"
                     ref={viewToggleRef}
                     variant="ghost"
                     size="md"
                     align="between"
-                    className="min-w-[108px] whitespace-nowrap"
                     onClick={() => {
                       setIsViewMenuOpen((previous) => {
                         const nextState = !previous;
@@ -587,8 +486,8 @@ function PeriodicTable({ elements, mode = 'explore' }: PeriodicTableProps) {
               ) : null}
             </div>
 
-            <div className="hidden min-[768px]:ml-auto min-[768px]:w-fit min-[768px]:shrink-0 min-[768px]:block">
-              <div className="rounded-xl border border-[var(--border-subtle)] px-2.5 py-2">
+            <div className="hidden min-[518px]:ml-auto min-[518px]:w-fit min-[518px]:shrink-0 min-[518px]:block">
+              <div className="min-w-[150px] rounded-xl border border-[var(--border-subtle)] px-2.5 py-2">
                 <p className="mb-1 text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)]">View</p>
                 <div className="flex flex-col items-start gap-1.5">
                   {VIEW_OPTIONS.map((option) => (
@@ -620,40 +519,6 @@ function PeriodicTable({ elements, mode = 'explore' }: PeriodicTableProps) {
       )}
       {sortMenuPortal}
       {compactViewMenuPortal}
-
-      <div
-        ref={fullscreenContainerRef}
-        className={`relative ${isFullscreenActive ? 'h-[100dvh] overflow-auto bg-[var(--background-base)] p-3' : ''}`}
-      >
-        {isFullscreenActive && activeViewMode !== 'classic' ? (
-          <div className="pointer-events-none absolute right-3 top-3 z-40">
-            <button
-              type="button"
-              onClick={onToggleTableFullscreen}
-              aria-label="Exit fullscreen table"
-              className="pointer-events-auto rounded-md border border-[var(--border-subtle)] bg-[var(--surface-1)]/95 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)] shadow-[0_8px_20px_rgba(0,0,0,0.35)] backdrop-blur-sm transition-colors hover:border-[var(--accent)] hover:text-[var(--text-strong)]"
-            >
-              Exit Fullscreen
-            </button>
-          </div>
-        ) : null}
-
-        <div>
-          {activeViewMode === 'classic' ? (
-            <ClassicPeriodicView
-              elements={visibleElements}
-              onElementOpen={openElementModal}
-              zoomPercent={classicZoomPercent}
-              onZoomChange={setClassicZoomPercent}
-              isFullscreen={isFullscreenActive}
-              onToggleFullscreen={onToggleTableFullscreen}
-            />
-          ) : activeViewMode === 'category' ? (
-            <CategoryPeriodicView elements={visibleElements} onElementOpen={openElementModal} />
-          ) : (
-            <CompactPeriodicView elements={visibleElements} onElementOpen={openElementModal} />
-          )}
-        </div>
 
         <ElementDetailsModal
           element={selectedElement}
